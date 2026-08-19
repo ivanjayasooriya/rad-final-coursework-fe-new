@@ -1,0 +1,58 @@
+import api from "./api";
+
+export const createPost = async (data: any) => {
+  const response = await api.post("/post/create", data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return response.data;
+};
+
+export const updatePost = async (id: string, data: any) => {
+  const response = await api.put(`/post/update/${id}`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return response.data;
+};
+
+export const deletePost = async (id: string) => {
+  const response = await api.delete(`/post/delete/${id}`);
+  return response.data;
+};
+
+export const getAllPosts = async (page: number, limit: number) => {
+  const response = await api.get(`/post/all?page=${page}&limit=${limit}`);
+  return response.data;
+};
+
+export const getMyPosts = async (page: number, limit: number) => {
+  const response = await api.get(`/post/my?page=${page}&limit=${limit}`);
+  return response.data;
+};
+
+export const addBookmark = async (id: string) => {
+  const response = await api.put(`/post/bookmark/${id}`);
+  return response.data;
+};
+
+export const removeBookmark = async (id: string) => {
+  const response = await api.put(`/post/unbookmark/${id}`);
+  return response.data;
+};
+
+export const getBookmarkPosts = async (page: number, limit: number) => {
+  const response = await api.get(
+    `/post/bookmark-posts?page=${page}&limit=${limit}`,
+  );
+  return response.data;
+};
+
+export const getFlyer = (id: string): void => {
+  window.open(
+    `https://rad-final-coursework-be-ynt7.vercel.app/api/v1/post/flyer/${id}`,
+    "_blank",
+  );
+};

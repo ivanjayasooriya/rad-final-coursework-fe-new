@@ -1,0 +1,323 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { updateUser, deleteAccount, changeProfileImage } from "../../service/user"; // Imported changeProfileImage
+import { getMyDetails } from "../../service/auth";
+import { alert } from "../../utils/alerts";
+import ProfileAvatarCard from "../../components/common/ProfileAvatarCard";
+
+const Profile = () => {
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Profile fields
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("");
+  const [profilePic, setProfilePic] = useState<string | null>(null);
+
+  // UI state
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
+
+  // ── Fetch profile ───────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getMyDetails();
+        const u = data.data;
+        setUsername(u.username ?? "");
+        setEmail(u.email ?? "");
+        setProfilePic(u.profilePic ?? null); // Assuming backend returns profilePic field
+
+        if (u.roles.includes("ADMIN")) {
+          setRole("ADMIN");
+        } else if (u.roles.includes("MODERATOR")) {
+          setRole("MOD");
+        } else if (u.roles.includes("USER")) {
+          setRole("USER");
+        }
+      } catch {
+        alert("Session expired. Redirecting to login…");
+        navigate("/login");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [navigate]);
+
+  // ── Profile Picture Upload Handler ──────────────────────────────────────────
+
+  const handleAvatarClick = () => {
+    // Only allow uploading if we are in edit mode
+    if (!isEditing) {
+      alert("Click 'Edit Profile' first to change your profile picture!");
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Optional client-side verification
+    if (!file.type.startsWith("image/")) {
+      alert("Please select a valid image file.");
+      return;
+    }
+
+    setUploadingImg(true);
+    try {
+      // Call service function just like the post creation page
+      await changeProfileImage(file);
+
+      // Update local state to preview the uploaded image instantly
+      const localUrl = URL.createObjectURL(file);
+      setProfilePic(localUrl);
+
+      alert.fire({
+        title: "Image uploaded successfully",
+        icon: "success",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+    } catch (error: any) {
+      // alert("Failed to upload image. Please try again.");
+      console.error("Failed to upload image:", error);
+
+      const msg = error.response?.data?.message || "Something went wrong!";
+
+      alert.fire({
+        title: "ERROR!",
+        text: `${msg}`,
+        icon: "error",
+        confirmButtonText: "Fix it",
+      });
+    } finally {
+      setUploadingImg(false);
+    }
+  };
+
+  // ── Save Details ────────────────────────────────────────────────────────────
+
+  const handleSave = async () => {
+    if (!username.trim() || !email.trim()) {
+      alert("Username and email are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateUser(username, email);
+      setIsEditing(false);
+
+      alert.fire({
+        title: "Profile updated successfully",
+        icon: "success",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+    } catch (error: any) {
+      console.error("Failed to update profile:", error);
+      const msg = error.response?.data?.message || "Something went wrong!";
+      alert.fire({
+        title: "ERROR!",
+        text: `${msg}`,
+        icon: "error",
+        confirmButtonText: "Fix it",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+  };
+
+  // ── Delete Account Handler ──────────────────────────────────────────────────
+  const handleDelete = async () => {
+    alert
+      .fire({
+        title: "ARE YOU ABSOLUTELY SURE?",
+        text: "THIS WILL PERMANENTLY WIPE YOUR PROFILE AND ALL YOUR LOST/FOUND PET REPORTS FROM PAWLINK HQ!",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#ef4444", // Solid red
+        cancelButtonColor: "#000000", // Neo-brutalist black
+        confirmButtonText: "YES, WIPE MY ACCOUNT!",
+        cancelButtonText: "NO, STAY ON THE SQUAD",
+      })
+      .then(async (result) => {
+        if (result.isConfirmed) {
+          setLoading(true);
+          try {
+            await deleteAccount();
+
+            await alert.fire({
+              title: "ACCOUNT DELETED",
+              text: "Your PawLink credentials have been scrubbed from the registry.",
+              icon: "success",
+              confirmButtonText: "Dismiss",
+            });
+
+            navigate("/login");
+          } catch (error: any) {
+            console.error("Failed to delete account:", error);
+            const msg =
+              error.response?.data?.message || "Could not delete account.";
+            alert.fire({
+              title: "DELETION FAILED!",
+              text: msg,
+              icon: "error",
+              confirmButtonText: "Fix it",
+            });
+            setLoading(false);
+          }
+        }
+      });
+  };
+
+  // ── Loading ─────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-6 [background-image:radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px]">
+        <div className="bg-white border-4 border-black p-6 font-mono font-black text-xl tracking-wider shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] uppercase">
+          Loading profile...
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-yellow-50 font-mono antialiased p-4 sm:p-8 [background-image:radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px]">
+      <div className="max-w-2xl mx-auto flex flex-col gap-8">
+        {/* Hidden File Input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept="image/*"
+          className="hidden"
+        />
+
+        {/* Header Hero Box */}
+        <div className="bg-purple-400 border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden transform -rotate-1">
+          <div className="absolute right-0 top-0 bg-yellow-400 border-b-4 border-l-4 border-black px-4 py-1 font-black uppercase tracking-tight text-xs sm:text-sm">
+            ID: ACCOUNT_PANEL
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-black text-black tracking-tight uppercase [text-shadow:2px_2px_0_#fff]">
+            My Profile
+          </h1>
+          <p className="text-black font-bold mt-1 text-sm bg-white inline-block px-2 border-2 border-black">
+            Manage your credentials below
+          </p>
+        </div>
+
+        {/* Big Profile Picture Box */}
+        <ProfileAvatarCard
+          profilePic={profilePic}
+          username={username}
+          email={email}
+          role={role}
+          isEditing={isEditing}
+          uploadingImg={uploadingImg}
+          onAvatarClick={handleAvatarClick}
+        />
+
+        {/* Account Details Form Block */}
+        <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+          <div className="bg-black text-white px-6 py-3 font-black uppercase tracking-wider text-sm flex items-center justify-between">
+            <span>Account Details</span>
+            <span className="w-3 h-3 rounded-full bg-red-500 inline-block border border-white"></span>
+          </div>
+
+          <div className="p-6 flex flex-col gap-6">
+            {/* Username Input */}
+            <div>
+              <label className="block text-sm font-black text-black uppercase tracking-wider mb-2">
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                disabled={!isEditing}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="YOUR USERNAME"
+                className="w-full px-4 py-3 text-base border-4 border-black bg-white text-black placeholder-gray-400 font-bold tracking-wide focus:outline-none focus:bg-yellow-50 transition disabled:bg-gray-100 disabled:text-gray-600 disabled:cursor-not-allowed shadow-[inset_4px_4px_0px_rgba(0,0,0,0.05)]"
+              />
+            </div>
+
+            {/* Email Input */}
+            <div>
+              <label className="block text-sm font-black text-black uppercase tracking-wider mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                disabled={!isEditing}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="YOU@EXAMPLE.COM"
+                className="w-full px-4 py-3 text-base border-4 border-black bg-white text-black placeholder-gray-400 font-bold tracking-wide focus:outline-none focus:bg-yellow-50 transition disabled:bg-gray-100 disabled:text-gray-600 disabled:cursor-not-allowed shadow-[inset_4px_4px_0px_rgba(0,0,0,0.05)]"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Action Controls Footer */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          {!isEditing ? (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-full py-4 text-md font-black text-black border-4 border-black bg-cyan-400 hover:bg-cyan-300 transition uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            >
+              Edit Profile
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleCancel}
+                disabled={saving || uploadingImg}
+                className="w-full sm:flex-1 py-4 text-md font-black text-black border-4 border-black bg-white hover:bg-gray-100 transition uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || uploadingImg}
+                className="w-full sm:flex-1 py-4 text-md font-black text-white border-4 border-black bg-red-500 hover:bg-red-600 transition uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {saving ? "Saving…" : "Save Changes"}
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* ── Dangerous Zone Section ── */}
+        <div className="mt-4 pt-4 border-t-4 border-dashed border-black">
+          <button
+            onClick={handleDelete}
+            disabled={saving || uploadingImg}
+            className="w-full py-3 text-xs font-black text-white border-4 border-black bg-black hover:bg-red-600 hover:text-black transition uppercase shadow-[4px_4px_0px_0px_rgba(239,68,68,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-[2px_2px_0px_0px_rgba(239,68,68,1)] disabled:opacity-50"
+          >
+            ⚠️ Danger Zone: Terminate PawLink Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Profile;
